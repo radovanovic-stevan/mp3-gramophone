@@ -7,7 +7,7 @@ A 3D horn gramophone in the browser. Add any MP3 (or other audio file) and it pl
 - Each record gets a label with the song's name
 - **Shellac sound** narrows the audio like a horn gramophone and adds surface crackle; switch it off for the original sound
 - Add several files and they play one after another from the record crate
-- Comes with a short demo waltz, generated in the browser
+- Comes with a few demo songs
 - Files never leave your browser
 
 ## Run it
