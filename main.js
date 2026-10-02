@@ -240,7 +240,7 @@ function wrapLines(g, text, maxWidth, maxLines) {
   }
   return lines;
 }
-function recordTexture(title, color) {
+function recordTexture(title, color, artist) {
   return canvasTexture(1024, (g, S) => {
     const c = S / 2;
     g.fillStyle = "#0a0a0a";
@@ -268,8 +268,13 @@ function recordTexture(title, color) {
     g.font = "600 21px 'Josefin Sans', sans-serif";
     g.fillText("G R A M O P H O N E", c, c - 112);
     g.font = "34px Limelight, Georgia, serif";
-    const lines = wrapLines(g, title, 250, 3);
-    lines.forEach((ln, i) => g.fillText(ln, c, c - 10 + (i - (lines.length - 1) / 2) * 40));
+    const lines = wrapLines(g, title, 250, artist ? 2 : 3);
+    const mid = artist ? c - 24 : c - 10;
+    lines.forEach((ln, i) => g.fillText(ln, c, mid + (i - (lines.length - 1) / 2) * 40));
+    if (artist) {
+      g.font = "600 20px 'Josefin Sans', sans-serif";
+      g.fillText(wrapLines(g, artist.toUpperCase(), 240, 1)[0], c, c + 50);
+    }
     g.font = "600 18px 'Josefin Sans', sans-serif";
     g.fillText("78 R.P.M.", c, c + 112);
     g.fillStyle = "#050505";                           // spindle hole
@@ -429,7 +434,7 @@ async function load(i, autoplay) {
   wound = false;
   const r = records[i];
   if (labelMat.map) labelMat.map.dispose();
-  labelMat.map = recordTexture(r.title, r.color);
+  labelMat.map = recordTexture(r.title, r.color, r.artist);
   labelMat.needsUpdate = true;
   audio.src = r.url;
   audio.load();
@@ -467,7 +472,7 @@ audio.addEventListener("error", () => {
 // ---------- UI ----------
 function renderUI() {
   const r = records[current];
-  $("title").textContent = r ? r.title : "No record on the platter";
+  $("title").textContent = r ? r.name : "No record on the platter";
   $("play").disabled = !r;
   $("play").classList.toggle("on", wanted);
   $("play").setAttribute("aria-label", wanted ? "Pause" : "Play");
@@ -479,7 +484,7 @@ function renderUI() {
     if (i === current) li.className = "current";
     li.innerHTML = `<button type="button"><span class="disc"></span><span class="name"></span><span class="len"></span></button>`;
     li.querySelector(".disc").style.background = rec.color;
-    li.querySelector(".name").textContent = rec.title;
+    li.querySelector(".name").textContent = rec.name;
     li.querySelector(".len").textContent = rec.duration ? fmt(rec.duration) : "";
     li.querySelector("button").addEventListener("click", () => {
       if (i === current) wanted ? pause() : play();
@@ -493,8 +498,8 @@ function addFiles(files) {
   const before = records.length;
   for (const f of files) {
     if (!f.type.startsWith("audio/") && !/\.(mp3|m4a|aac|wav|ogg|oga|opus|flac|webm)$/i.test(f.name)) continue;
-    const title = f.name.replace(/\.[^.]+$/, "").replace(/[_]+/g, " ").trim() || "Untitled";
-    records.push({ title, url: URL.createObjectURL(f), color: labelColor(title) });
+    const name = f.name.replace(/\.[^.]+$/, "").replace(/[_]+/g, " ").trim() || "Untitled";
+    records.push({ ...splitName(name), url: URL.createObjectURL(f), color: labelColor(name) });
     probeDuration(records.at(-1));
   }
   if (records.length === before) {
@@ -506,6 +511,11 @@ function addFiles(files) {
   renderUI();
   // put the first new record on the platter, unless something is playing
   if (!wanted) { ensureAudio(); unlock(); load(before, false); }
+}
+// "Artist - Title" file names put the artist on its own line of the label
+function splitName(name) {
+  const m = name.match(/^(.+?)\s+[-–—]\s+(.+)$/);
+  return m ? { name, artist: m[1], title: m[2] } : { name, artist: "", title: name };
 }
 function probeDuration(rec) {
   const a = new Audio();
@@ -643,7 +653,21 @@ await Promise.race([
   Promise.all([document.fonts.load("34px Limelight"), document.fonts.load("600 21px 'Josefin Sans'")]),
   wait(2500),
 ]);
+// built-in records ship in records/; any file that's missing is skipped
+const BUILT_IN = [
+  ["Desingerica - Folkicc", "records/desingerica-folkicc.mp3"],
+  ["Sinan Sakić - Ej, otkad sam se rodio", "records/sinan-sakic-ej-otkad-sam-se-rodio.mp3"],
+  ["Bejbi Motorola - Smuti", "records/bejbi-motorola-smuti.mp3"],
+  ["Šta sam jeo", "records/sta-sam-jeo.mp3"],
+];
+const found = await Promise.all(BUILT_IN.map(([, url]) =>
+  fetch(url, { method: "HEAD" }).then(r => r.ok).catch(() => false)));
+BUILT_IN.forEach(([name, url], i) => {
+  if (!found[i]) return;
+  records.push({ ...splitName(name), url, color: labelColor(name) });
+  probeDuration(records.at(-1));
+});
 const demo = await demoRecord();
-records.push({ title: "Demo Waltz", url: URL.createObjectURL(demo), color: "#7a1f1f", duration: 25.5 });
+records.push({ ...splitName("Demo Waltz"), url: URL.createObjectURL(demo), color: "#7a1f1f", duration: 25.5 });
 renderUI();
 load(0, false);

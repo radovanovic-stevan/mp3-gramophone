@@ -28,6 +28,7 @@ jobs:
         run: |
           mkdir _site
           cp index.html style.css main.js _site/
+          cp -r records _site/
 
       - uses: actions/configure-pages@v5
 
