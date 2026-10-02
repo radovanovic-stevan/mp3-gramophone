@@ -1,0 +1,106 @@
+/* Layout: the gramophone fills the window like a lit listening room; a brass-trimmed player card sits bottom-left */
+:root {
+  --room: #120c09;
+  --room-glow: #3a2416;
+  --panel: rgba(20, 13, 9, .8);
+  --line: rgba(212, 162, 76, .26);
+  --ink: #f1e6d2;
+  --muted: #b29f86;
+  --brass: #d4a24c;
+  --brass-hi: #f0cc80;
+  --danger: #ff8a73;
+  --display: "Limelight", "Didot", "Bodoni 72", Georgia, serif;
+  --body: "Josefin Sans", "Futura", "Avenir Next", system-ui, sans-serif;
+  --mono: "DM Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: dark;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: radial-gradient(120% 90% at 50% 38%, var(--room-glow) 0%, var(--room) 62%);
+  color: var(--ink); font: 400 15px/1.45 var(--body);
+  overflow: hidden;
+}
+[hidden] { display: none !important; }
+button, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--brass-hi); outline-offset: 2px; }
+
+#scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+
+.brand { position: fixed; top: calc(20px + env(safe-area-inset-top, 0px)); left: 24px; pointer-events: none; }
+.brand h1 { margin: 0; font: 400 clamp(1.9rem, 4vw, 2.7rem)/1 var(--display); color: var(--brass-hi); letter-spacing: .02em; }
+.brand p { margin: 6px 0 0; color: var(--muted); font-size: .85rem; letter-spacing: .04em; }
+
+.deck {
+  position: fixed; left: 24px; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); width: 340px;
+  display: grid; gap: 14px; padding: 18px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .45);
+}
+.eyebrow { font-size: .68rem; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+.title { font: 400 1.35rem/1.15 var(--display); color: var(--ink); overflow-wrap: anywhere; margin-top: 4px; }
+.error { margin-top: 6px; color: var(--danger); font-size: .85rem; }
+
+.transport { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px; }
+.play {
+  width: 54px; height: 54px; border-radius: 50%; border: 0; cursor: pointer; display: grid; place-items: center;
+  background: radial-gradient(circle at 35% 30%, var(--brass-hi), var(--brass) 55%, #8a6326);
+  box-shadow: inset 0 -3px 6px rgba(0, 0, 0, .35), 0 4px 14px rgba(0, 0, 0, .4);
+}
+.play svg { width: 22px; height: 22px; fill: #22150b; }
+.play:disabled { filter: grayscale(.8) brightness(.6); cursor: default; }
+.play .icon-pause, .play.on .icon-play { display: none; }
+.play.on .icon-pause { display: block; }
+.time { font: 500 1rem var(--mono); font-variant-numeric: tabular-nums; }
+.time .sep { color: var(--muted); margin: 0 6px; }
+.status { font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); text-align: right; }
+
+input[type="range"] { width: 100%; accent-color: var(--brass); margin: 0; }
+
+.options { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 18px; font-size: .88rem; }
+.toggle { display: inline-flex; align-items: center; gap: 9px; cursor: pointer; }
+.toggle input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.toggle .track { width: 36px; height: 20px; border-radius: 999px; background: #3b2c20; border: 1px solid var(--line); position: relative; transition: background .2s; }
+.toggle .thumb { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--muted); transition: transform .2s, background .2s; }
+.toggle input:checked + .track { background: #6b4c1f; }
+.toggle input:checked + .track .thumb { transform: translateX(16px); background: var(--brass-hi); }
+.toggle input:focus-visible + .track { outline: 2px solid var(--brass-hi); outline-offset: 2px; }
+.volume { display: inline-flex; align-items: center; gap: 9px; }
+.volume input { width: 96px; }
+
+.crate { display: grid; gap: 8px; border-top: 1px solid var(--line); padding-top: 12px; }
+.crate-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.add {
+  cursor: pointer; font-size: .85rem; font-weight: 600; color: var(--brass-hi);
+  border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px;
+}
+.add:hover { background: rgba(212, 162, 76, .12); }
+#crate { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: 168px; overflow-y: auto; }
+#crate button {
+  width: 100%; display: grid; grid-template-columns: 14px 1fr auto; gap: 10px; align-items: center;
+  padding: 7px 8px; border: 0; border-radius: 8px; background: transparent; cursor: pointer; text-align: left;
+}
+#crate button:hover { background: rgba(255, 255, 255, .05); }
+#crate li.current button { background: rgba(212, 162, 76, .14); }
+#crate .disc { width: 14px; height: 14px; border-radius: 50%; border: 4px solid #0b0b0b; box-shadow: 0 0 0 1px rgba(255,255,255,.15); }
+#crate .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#crate .len { font: .78rem var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.hint { position: fixed; right: 20px; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); color: var(--muted); font-size: .75rem; letter-spacing: .04em; pointer-events: none; }
+
+.drop {
+  position: fixed; inset: 12px; border: 2px dashed var(--brass); border-radius: 18px;
+  background: rgba(18, 12, 9, .72); display: grid; place-items: center; pointer-events: none;
+}
+.drop div { font: 400 clamp(1.6rem, 4vw, 2.4rem) var(--display); color: var(--brass-hi); }
+
+@media (max-width: 640px) {
+  .brand { left: 16px; top: calc(14px + env(safe-area-inset-top, 0px)); }
+  .deck { left: 12px; right: 12px; width: auto; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); padding: 14px; gap: 10px; }
+  #crate { max-height: 96px; }
+  .hint { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toggle .track, .toggle .thumb { transition: none; }
+}
