@@ -527,6 +527,10 @@ function probeDuration(rec) {
 $("play").addEventListener("click", () => (wanted ? pause() : play()));
 $("file").addEventListener("change", e => { addFiles(e.target.files); e.target.value = ""; });
 $("vintage").addEventListener("change", applyTone);
+$("rightsBtn").addEventListener("click", e => {          // touch screens have no hover, so a tap toggles the note
+  const open = e.currentTarget.parentElement.classList.toggle("open");
+  e.currentTarget.setAttribute("aria-expanded", open);
+});
 $("vol").addEventListener("input", () => { if (master) master.gain.setTargetAtTime(volume(), ctx.currentTime, 0.03); });
 let seeking = false;
 $("seek").addEventListener("input", e => {
@@ -656,9 +660,9 @@ await Promise.race([
 // built-in records ship in records/; any file that's missing is skipped
 const BUILT_IN = [
   ["Desingerica - Folkicc", "records/desingerica-folkicc.mp3"],
-  ["Sinan Sakić - Ej, otkad sam se rodio", "records/sinan-sakic-ej-otkad-sam-se-rodio.mp3"],
-  ["Bejbi Motorola - Smuti", "records/bejbi-motorola-smuti.mp3"],
-  ["Šta sam jeo", "records/sta-sam-jeo.mp3"],
+  ["Sinan Sakić - Ej, od kad sam se rodio", "records/sinan-sakic-ej-od-kad-sam-se-rodio.mp3"],
+  ["Lobo x Bejbi Motorola - Smuti", "records/lobo-x-bejbi-motorola-smuti.mp3"],
+  ["Pick Up the Phone", "records/pick-up-the-phone.mp3"],
 ];
 const found = await Promise.all(BUILT_IN.map(([, url]) =>
   fetch(url, { method: "HEAD" }).then(r => r.ok).catch(() => false)));

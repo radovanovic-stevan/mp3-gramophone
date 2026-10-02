@@ -58,7 +58,13 @@
 
   <div class="crate">
     <div class="crate-head">
-      <div class="eyebrow">Record crate</div>
+      <div class="crate-title">
+        <div class="eyebrow">Record crate</div>
+        <span class="rights">
+          <button class="info" id="rightsBtn" type="button" aria-label="About the music" aria-expanded="false" aria-describedby="rightsNote">i</button>
+          <span class="rights-note" id="rightsNote" role="tooltip">A non-commercial fan project, made for fun. It's free, has no ads and earns nothing. The built-in songs belong to their artists and labels. If one of them is yours and you'd like it removed, get in touch and it will be taken down.</span>
+        </span>
+      </div>
       <label class="add" for="file">+ Add MP3s</label>
       <input type="file" id="file" accept="audio/*,.mp3" multiple hidden>
     </div>
