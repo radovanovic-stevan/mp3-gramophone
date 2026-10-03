@@ -6,6 +6,7 @@ A 3D horn gramophone in the browser. Add any MP3 (or other audio file) and it pl
 - The arm follows the music inward as the track plays
 - Each record gets a label with the song's name
 - **Shellac sound** narrows the audio like a horn gramophone and adds surface crackle; switch it off for the original sound
+- **Cartoon horn** (off by default) makes the horn bounce to the beat and blow music notes out of the bell, like an old cartoon
 - Add several files and they play one after another from the record crate
 - Comes with a few demo songs
 - Files never leave your browser

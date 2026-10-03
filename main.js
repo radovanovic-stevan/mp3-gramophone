@@ -169,29 +169,47 @@ const REST = armAngleFor(R_OUT) - 0.42;
 const restTip = { x: P.x + L * Math.cos(REST), z: P.z + L * Math.sin(REST) };
 mesh(new THREE.CylinderGeometry(0.035, 0.05, 0.16, 16), brassDark, gramophone, [restTip.x, Y0 + 0.08, restTip.z]);
 
-// fluted horn: a swept tube whose radius flares toward the bell
+// fluted horn: a swept tube whose radius flares toward the bell.
+// flare(puff) widens the bell by up to `puff` (0.2 = 20%) for the cartoon mode.
 function hornGeometry(curve, segs, radial, r0, r1) {
   const frames = curve.computeFrenetFrames(segs, false);
-  const pos = [], idx = [];
+  const centre = [], offset = [], weight = [], idx = [];
   const ring = (t, i, j) => {
-    const p = curve.getPointAt(t), n = frames.normals[i], b = frames.binormals[i];
+    const n = frames.normals[i], b = frames.binormals[i];
     const th = (j / radial) * Math.PI * 2;
     const r = r0 + (r1 - r0) * Math.pow(t, 3.4);
     const rr = r * (1 + 0.06 * t * t * Math.cos(10 * th));
-    return p.clone().addScaledVector(n, Math.cos(th) * rr).addScaledVector(b, Math.sin(th) * rr);
+    return new THREE.Vector3().addScaledVector(n, Math.cos(th) * rr).addScaledVector(b, Math.sin(th) * rr);
   };
   for (let i = 0; i <= segs; i++) {
-    for (let j = 0; j <= radial; j++) pos.push(...ring(i / segs, i, j).toArray());
+    const t = i / segs, p = curve.getPointAt(t);
+    for (let j = 0; j <= radial; j++) {
+      centre.push(p.x, p.y, p.z);
+      offset.push(...ring(t, i, j).toArray());
+      weight.push(t ** 4);
+    }
   }
   for (let i = 0; i < segs; i++) for (let j = 0; j < radial; j++) {
     const a = i * (radial + 1) + j, b = a + radial + 1;
     idx.push(a, b, a + 1, b, b + 1, a + 1);
   }
   const g = new THREE.BufferGeometry();
-  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("position", new THREE.Float32BufferAttribute(centre.length, 3));
   g.setIndex(idx);
-  g.computeVertexNormals();
-  return { geometry: g, rim: Array.from({ length: radial }, (_, j) => ring(1, segs, j)) };
+  const flare = puff => {
+    const a = g.attributes.position.array;
+    for (let v = 0, k = 0; v < weight.length; v++, k += 3) {
+      const f = 1 + puff * weight[v];
+      a[k] = centre[k] + offset[k] * f;
+      a[k + 1] = centre[k + 1] + offset[k + 1] * f;
+      a[k + 2] = centre[k + 2] + offset[k + 2] * f;
+    }
+    g.attributes.position.needsUpdate = true;
+    g.computeVertexNormals();
+  };
+  flare(0);
+  const end = curve.getPointAt(1);
+  return { geometry: g, flare, rim: Array.from({ length: radial }, (_, j) => ring(1, segs, j).add(end)) };
 }
 const hornCurve = new THREE.CatmullRomCurve3([
   new THREE.Vector3(P.x, Y0 + 0.44, P.z),
@@ -201,8 +219,20 @@ const hornCurve = new THREE.CatmullRomCurve3([
   new THREE.Vector3(P.x - 0.55, Y0 + 2.62, P.z + 0.6),
 ]);
 const horn = hornGeometry(hornCurve, 140, 80, 0.075, 1.25);
-mesh(horn.geometry, brass, gramophone);
-mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(horn.rim, true), 160, 0.035, 10, true), brass, gramophone);
+// the horn hangs from a rig at its base, so the cartoon mode can squash, stretch and sway it from there
+const HORN_BASE = hornCurve.getPointAt(0), BELL = hornCurve.getPointAt(1), BELL_DIR = hornCurve.getTangentAt(1);
+const hornRig = new THREE.Group();
+hornRig.position.copy(HORN_BASE);
+gramophone.add(hornRig);
+const hornBody = new THREE.Group();
+hornBody.position.copy(HORN_BASE).negate();
+hornRig.add(hornBody);
+mesh(horn.geometry, brass, hornBody);
+const bellRim = new THREE.Group();
+bellRim.position.copy(BELL);
+hornBody.add(bellRim);
+mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(horn.rim, true), 160, 0.035, 10, true), brass, bellRim,
+  BELL.clone().negate().toArray());
 
 // winding crank on the right side
 const crank = new THREE.Group();
@@ -295,7 +325,7 @@ function tween(obj, prop, to, ms) {
 // ---------- audio ----------
 const audio = new Audio();
 audio.preload = "auto";
-let ctx, master, dryGain, wetGain, crackleGain;
+let ctx, master, dryGain, wetGain, crackleGain, bassTap, bassBuf;
 
 function crackleBuffer(ac) {
   const len = ac.sampleRate * 6, buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0);
@@ -334,6 +364,13 @@ function ensureAudio() {
   crackleGain.gain.value = 0;
   crackle.connect(crackleGain).connect(master);
   crackle.start();
+  // a silent tap on the bass, read by the cartoon horn to find the beat
+  const bassLp = ctx.createBiquadFilter(); bassLp.type = "lowpass"; bassLp.frequency.value = 150;
+  bassTap = ctx.createAnalyser();
+  bassTap.fftSize = 1024;
+  bassBuf = new Float32Array(bassTap.fftSize);
+  const silent = ctx.createGain(); silent.gain.value = 0;
+  src.connect(bassLp).connect(bassTap).connect(silent).connect(ctx.destination);
   master.connect(ctx.destination);
   applyTone();
 }
@@ -603,6 +640,132 @@ function wav(buf) {
   return view;
 }
 
+// ---------- cartoon horn: the horn bounces to the beat and blows out music notes ----------
+// each note is drawn twice: a thick dark outline, then the light fill, so it reads against the brass bell
+function noteTexture(draw) {
+  return canvasTexture(128, g => {
+    g.lineCap = g.lineJoin = "round";
+    for (const pad of [7, 0]) {
+      g.fillStyle = g.strokeStyle = pad ? "#24130a" : "#fff";
+      draw(g, pad);
+    }
+  });
+}
+const head = (g, pad, x, y) => {
+  g.beginPath(); g.ellipse(x, y, 18, 12, -0.4, 0, Math.PI * 2); g.fill();
+  if (pad) { g.lineWidth = pad * 2; g.stroke(); }
+};
+const line = (g, pad, w, draw) => { g.lineWidth = w + pad * 2; g.beginPath(); draw(); g.stroke(); };
+const NOTE_TEXTURES = [
+  noteTexture((g, p) => {                              // eighth note
+    line(g, p, 7, () => { g.moveTo(66, 90); g.lineTo(66, 20); });
+    line(g, p, 8, () => { g.moveTo(66, 22); g.bezierCurveTo(78, 40, 102, 48, 90, 74); });
+    head(g, p, 50, 94);
+  }),
+  noteTexture((g, p) => {                              // two beamed eighths
+    line(g, p, 7, () => { g.moveTo(46, 96); g.lineTo(46, 32); });
+    line(g, p, 7, () => { g.moveTo(102, 84); g.lineTo(102, 20); });
+    line(g, p, 14, () => { g.moveTo(46, 32); g.lineTo(102, 20); });
+    head(g, p, 30, 100); head(g, p, 86, 88);
+  }),
+  noteTexture((g, p) => {                              // quarter note
+    line(g, p, 7, () => { g.moveTo(72, 90); g.lineTo(72, 18); });
+    head(g, p, 56, 94);
+  }),
+];
+const NOTE_COLORS = [0xfff6e2, 0xf3e3bd, 0xffe2a6, 0xffd98a];
+const NOTE_LIFE = 2.8;
+const notes = Array.from({ length: 40 }, () => {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthWrite: false }));
+  s.visible = false;
+  scene.add(s);
+  return { s, age: 0, vel: new THREE.Vector3(), size: 0, phase: 0 };
+});
+// two directions across the mouth of the bell, for scattering notes and wiggling them
+const BELL_U = new THREE.Vector3().crossVectors(BELL_DIR, new THREE.Vector3(0, 1, 0)).normalize();
+const BELL_V = new THREE.Vector3().crossVectors(BELL_DIR, BELL_U).normalize();
+
+const toon = { on: false, x: 0, v: 0, level: 0, avg: 0, lastBeat: 0, lastNote: 0, puff: 0 };
+try { toon.on = localStorage.getItem("gramophone.cartoon") === "1"; } catch {}
+$("cartoon").checked = toon.on;
+$("cartoon").addEventListener("change", e => {
+  toon.on = e.target.checked;
+  try { localStorage.setItem("gramophone.cartoon", toon.on ? "1" : "0"); } catch {}
+});
+
+function blowNote(now) {
+  const n = notes.find(n => !n.s.visible);
+  if (!n) return;
+  toon.lastNote = now;
+  const mouth = hornBody.localToWorld(BELL.clone());
+  // the bell points up a lot, so flatten the throw to keep the notes floating out toward the room
+  const dir = BELL_DIR.clone().applyQuaternion(hornRig.quaternion);
+  dir.y *= 0.35;
+  dir.normalize();
+  const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * 0.5;
+  n.s.position.copy(mouth).addScaledVector(BELL_U, Math.cos(a) * r).addScaledVector(BELL_V, Math.sin(a) * r)
+    .addScaledVector(dir, 0.25);
+  // fan out from where the note left the bell, so they spread across the mouth instead of stacking up
+  n.vel.copy(dir).multiplyScalar(0.6 + Math.random() * 0.4)
+    .addScaledVector(BELL_U, Math.cos(a) * 0.75).addScaledVector(BELL_V, Math.sin(a) * 0.75);
+  n.vel.y += 0.25;
+  n.s.material.map = NOTE_TEXTURES[Math.floor(Math.random() * NOTE_TEXTURES.length)];
+  n.s.material.color.setHex(NOTE_COLORS[Math.floor(Math.random() * NOTE_COLORS.length)]);
+  n.size = 0.3 + Math.random() * 0.16;
+  n.phase = Math.random() * Math.PI * 2;
+  n.age = 0;
+  n.s.visible = true;
+}
+
+function updateToon(dt, now) {
+  const live = toon.on && needleOn && !audio.paused && bassTap;
+  let level = 0;
+  if (live) {
+    // beat = bass energy jumping well above its recent average
+    bassTap.getFloatTimeDomainData(bassBuf);
+    let e = 0;
+    for (const s of bassBuf) e += s * s;
+    e /= bassBuf.length;
+    if (e > toon.avg * 1.5 && e > 1e-4 && now - toon.lastBeat > 0.25) {
+      toon.lastBeat = now;
+      toon.v += 5.5;                                   // boing
+      blowNote(now);
+      if (Math.random() < 0.3) blowNote(now);
+    }
+    toon.avg += (e - toon.avg) * Math.min(1, dt * 1.5);
+    level = toon.avg > 0 ? Math.min(1, Math.sqrt(e / toon.avg) * 0.6) : 0;
+    if (now - toon.lastNote > 1.2 && toon.avg > 1e-4) blowNote(now);   // songs without a strong kick still get notes
+  }
+  toon.level += (level - toon.level) * Math.min(1, dt * 4);
+
+  // a loose spring, so every beat overshoots and wobbles back like a rubber hose
+  toon.v += ((toon.level * 0.3 - toon.x) * 160 - toon.v * 9) * dt;
+  toon.x = THREE.MathUtils.clamp(toon.x + toon.v * dt, -0.6, 1.2);
+  const x = toon.x, sway = toon.on ? toon.level : 0;
+  hornRig.scale.set(1 - 0.06 * x, 1 + 0.14 * x, 1 - 0.06 * x);
+  hornRig.rotation.z += (Math.sin(now * 2.4) * 0.06 * sway - hornRig.rotation.z) * Math.min(1, dt * 5);
+  hornRig.rotation.x += (Math.sin(now * 1.7 + 1) * 0.045 * sway - hornRig.rotation.x) * Math.min(1, dt * 5);
+  const puff = Math.max(0, x) * 0.32;
+  if (Math.abs(puff - toon.puff) > 0.002 || (puff === 0 && toon.puff !== 0)) {
+    toon.puff = puff;
+    horn.flare(puff);
+    bellRim.scale.setScalar(1 + puff);
+  }
+
+  for (const n of notes) {
+    if (!n.s.visible) continue;
+    n.age += dt;
+    if (n.age >= NOTE_LIFE) { n.s.visible = false; continue; }
+    n.vel.y += 0.05 * dt;
+    n.vel.multiplyScalar(Math.exp(-dt * 0.7));
+    n.s.position.addScaledVector(n.vel, dt).addScaledVector(BELL_U, Math.cos(n.age * 4.5 + n.phase) * 0.45 * dt);
+    const t = Math.min(1, n.age / 0.3), pop = 1 + 2.7 * (t - 1) ** 3 + 1.7 * (t - 1) ** 2;   // ease-out-back
+    n.s.scale.setScalar(n.size * pop);
+    n.s.material.rotation = Math.sin(n.age * 3 + n.phase) * 0.35;
+    n.s.material.opacity = Math.min(1, n.age / 0.15) * Math.min(1, (NOTE_LIFE - n.age) / 0.8);
+  }
+}
+
 // ---------- render loop ----------
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
@@ -641,6 +804,7 @@ renderer.setAnimationLoop(() => {
     if (tw.t >= 1) { tweens.delete(obj); tw.resolve(); }
   }
   for (let i = waiters.length - 1; i >= 0; i--) if (waiters[i].cond()) waiters.splice(i, 1)[0].resolve();
+  updateToon(dt, clock.elapsedTime);
 
   if (current >= 0) {
     $("cur").textContent = fmt(audio.currentTime);
